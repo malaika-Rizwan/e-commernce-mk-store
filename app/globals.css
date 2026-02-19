@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-background: 190 185 180; /* #BEB9B4 pageBg */
+    --color-foreground: 73 71 77; /* #49474D darkBase */
+    --color-surface: 255 255 255;
+    --color-muted: 230 226 222; /* #E6E2DE cardBg */
+    --color-muted-foreground: 90 88 92;
+    --color-border: 190 185 180;
+    --color-accent: 235 187 105; /* #EBBB69 */
+  }
+
+  .dark {
+    --color-background: 45 43 48; /* slightly darker than darkBase */
+    --color-foreground: 230 228 225;
+    --color-surface: 60 58 63;
+    --color-muted: 55 53 58;
+    --color-muted-foreground: 180 178 175;
+    --color-border: 65 63 68;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-pageBg text-foreground antialiased;
+    background-color: #BEB9B4;
+  }
+
+  .dark body {
+    background-color: #2d2b30;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .dark .glass {
+    background: rgba(45, 43, 48, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
