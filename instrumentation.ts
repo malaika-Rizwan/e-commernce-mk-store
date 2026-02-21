@@ -21,8 +21,8 @@ export async function register() {
     if (name === 'unhandledRejection' && args[0] != null && isAbortError(args[0])) {
       return false;
     }
-    return origEmit.apply(this, [name, ...args] as Parameters<typeof origEmit>);
-  };
+    return origEmit.apply(this, [name, ...args] as Parameters<typeof origEmit>) as unknown as boolean;
+  } as typeof process.emit;
 
   const origConsoleError = console.error;
   console.error = function (...args: unknown[]) {

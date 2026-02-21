@@ -1,10 +1,11 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 
-export default function OrderCancelPage() {
+function OrderCancelContent() {
   const searchParams = useSearchParams();
   const reason = searchParams.get('reason');
   const message =
@@ -59,5 +60,17 @@ export default function OrderCancelPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrderCancelPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-pageBg flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primaryAccent border-t-transparent" />
+      </div>
+    }>
+      <OrderCancelContent />
+    </Suspense>
   );
 }

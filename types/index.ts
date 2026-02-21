@@ -9,6 +9,7 @@ export interface IUserAddress {
 }
 
 export interface IUserAddressFull {
+  _id?: Types.ObjectId;
   fullName: string;
   phone: string;
   address: string;
@@ -31,6 +32,10 @@ export interface IUser {
   isVerified?: boolean;
   verificationToken?: string;
   verificationTokenExpires?: Date;
+  verificationCode?: string;
+  verificationCodeExpires?: Date;
+  otp?: string;
+  otpExpire?: Date;
   resetPasswordToken?: string;
   resetPasswordExpire?: Date;
   twoFactorEnabled?: boolean;
@@ -90,6 +95,9 @@ export interface IOrderItem {
 
 export type OrderStatus = 'pending' | 'Processing' | 'Shipped' | 'Out for Delivery' | 'Delivered' | 'cancelled';
 
+/** Internal status field in Order schema (lowercase enum). */
+export type OrderStatusInternal = 'pending' | 'shipped' | 'delivered' | 'cancelled';
+
 export interface IOrder {
   _id: Types.ObjectId;
   user: Types.ObjectId;
@@ -119,7 +127,7 @@ export interface IOrder {
   couponCode?: string;
   totalPrice: number;
   orderStatus?: OrderStatus;
-  status?: OrderStatus;
+  status?: OrderStatusInternal;
   isPaid: boolean;
   paidAt?: Date;
   isDelivered: boolean;

@@ -95,7 +95,7 @@ export async function assignOrderIds(order: IOrderDocument): Promise<void> {
   order.orderId = orderId;
   order.trackingNumber = order.trackingNumber ?? generateTrackingNumber();
   order.estimatedDelivery = order.estimatedDelivery ?? getEstimatedDeliveryDate();
-  order.orderStatus = (order.orderStatus as string) || 'Processing';
+  order.orderStatus = ((order.orderStatus as string) || 'Processing') as OrderStatus;
 }
 
 const Order: Model<IOrderDocument> =

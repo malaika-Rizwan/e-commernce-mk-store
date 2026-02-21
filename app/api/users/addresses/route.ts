@@ -19,8 +19,8 @@ export async function GET() {
     const user = await User.findById(session.userId).select('addresses').lean();
     if (!user) return unauthorizedResponse();
 
-    const addresses = (user.addresses ?? []).map((a: { _id: unknown; fullName: string; phone: string; address: string; city: string; postalCode: string; country: string; isDefault?: boolean }) => ({
-      _id: a._id?.toString(),
+    const addresses = (user.addresses ?? []).map((a) => ({
+      _id: (a as { _id?: { toString: () => string } })._id?.toString(),
       fullName: a.fullName,
       phone: a.phone,
       address: a.address,

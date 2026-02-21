@@ -31,6 +31,9 @@ import {
 } from '@/lib/validations/auth';
 import type { NextRequest } from 'next/server';
 
+const PASSWORD_RESET_RATE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const PASSWORD_RESET_RATE_MAX = 3;
+
 function validationError(issues: { message: string }[]): NextResponse {
   const message = issues.map((i) => i.message).join('. ');
   return errorResponse(message, 400);
@@ -168,9 +171,9 @@ export async function forgotPassword(request: NextRequest): Promise<NextResponse
     const { email } = parsed.data;
     const emailLower = email.toLowerCase().trim();
 
-    const { success: rateOk } = await rateLimit(`otp:${emailLower}`, 'auth:otp', {
-      windowMs: OTP_RATE_WINDOW_MS,
-      max: OTP_RATE_MAX,
+    const { success: rateOk } = await rateLimit(`pwreset:${emailLower}`, 'auth:password-reset', {
+      windowMs: PASSWORD_RESET_RATE_WINDOW_MS,
+      max: PASSWORD_RESET_RATE_MAX,
     });
     if (!rateOk) {
       return successResponse({

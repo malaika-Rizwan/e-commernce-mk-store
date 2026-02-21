@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const user = await User.findById(session.userId);
     if (!user) return unauthorizedResponse();
 
-    const subdoc = user.addresses?.id(id);
+    const subdoc = user.addresses?.find((a) => a._id?.toString() === id);
     if (!subdoc) return notFoundResponse('Address not found');
 
     const data = parsed.data;
@@ -56,7 +56,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     await user.save();
 
-    const updated = user.addresses?.id(id);
+    const updated = user.addresses?.find((a) => a._id?.toString() === id);
     return successResponse({
       _id: (updated as { _id?: { toString: () => string } })?._id?.toString(),
       fullName: (updated as { fullName: string })?.fullName,
@@ -87,10 +87,10 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
     const user = await User.findById(session.userId);
     if (!user) return unauthorizedResponse();
 
-    const subdoc = user.addresses?.id(id);
+    const subdoc = user.addresses?.find((a) => a._id?.toString() === id);
     if (!subdoc) return notFoundResponse('Address not found');
 
-    user.addresses?.pull(id);
+    (user.addresses as unknown as mongoose.Types.DocumentArray<mongoose.Types.Subdocument>).pull(id);
     await user.save();
 
     return successResponse({ message: 'Address deleted' });

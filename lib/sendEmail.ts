@@ -85,7 +85,7 @@ export async function sendEmail({
       try {
         const { error } = await resend.emails.send({
           from: from.includes('<') ? from : `MK Store <${from}>`,
-          to: [to],
+          to,
           subject,
           html,
           ...(text && { text }),

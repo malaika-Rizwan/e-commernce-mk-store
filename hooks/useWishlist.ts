@@ -10,13 +10,15 @@ const inFlightByUserId = new Map<string, Promise<Set<string>>>();
 async function fetchWishlistIdsForUser(userId: string): Promise<Set<string>> {
   const existing = inFlightByUserId.get(userId);
   if (existing) return existing;
-  const promise = (async () => {
+  const promise = (async (): Promise<Set<string>> => {
     try {
       const res = await fetch('/api/wishlist', { credentials: 'include' });
       if (!res.ok) return new Set<string>();
       const json = await res.json();
       const products = json.data?.products ?? [];
-      const productIds = products.map((p: { _id?: string }) => p._id?.toString()).filter(Boolean);
+      const productIds = products
+        .map((p: { _id?: string }) => p._id?.toString())
+        .filter((id: string | undefined): id is string => Boolean(id));
       return new Set(productIds);
     } catch {
       return new Set<string>();

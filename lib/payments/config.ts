@@ -3,7 +3,7 @@
  * Used by GET /api/config/payments to drive checkout UI.
  */
 
-const env = typeof process !== 'undefined' ? process.env : {};
+const env: Record<string, string | undefined> = typeof process !== 'undefined' ? process.env : {};
 
 export const PAYMENT_METHODS = {
   cod: {
