@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
-import Order from '@/models/Order';
+import Order, { assignOrderIds } from '@/models/Order';
 import Product from '@/models/Product';
 import Coupon from '@/models/Coupon';
 import { getSession } from '@/lib/auth';
 import { rateLimit, getClientIdentifier } from '@/lib/rate-limit';
-import { stripe, formatAmountForStripe } from '@/lib/stripe';
+import { stripe, formatAmountForStripe, isStripeConfigured } from '@/lib/stripe';
 import {
   successResponse,
   errorResponse,
@@ -22,7 +23,7 @@ const TAX_RATE = 0.1;
 export async function POST(request: NextRequest) {
   try {
     const id = getClientIdentifier(request);
-    const { success, remaining, resetAt } = rateLimit(id, 'checkout', { windowMs: 60 * 1000, max: 10 });
+    const { success, remaining, resetAt } = await rateLimit(id, 'checkout', { windowMs: 60 * 1000, max: 10 });
     if (!success) {
       return new Response(
         JSON.stringify({ success: false, error: 'Too many checkout attempts. Try again later.' }),
@@ -31,8 +32,15 @@ export async function POST(request: NextRequest) {
     }
     const session = await getSession();
     if (!session) return unauthorizedResponse();
+    if (!isStripeConfigured()) {
+      return errorResponse('Card payments are not configured. Use Cash on Delivery or add STRIPE_SECRET_KEY to .env.local', 503);
+    }
+
+    await connectDB();
 
     const body = await request.json();
+    // Temporary debug – remove after testing
+    console.log('Checkout body (Stripe):', JSON.stringify({ ...body, items: body?.items?.length ?? 0 }));
     const parsed = createCheckoutSessionSchema.safeParse(body);
     if (!parsed.success) {
       const msg = parsed.error.errors.map((e) => e.message).join('. ');
@@ -40,8 +48,60 @@ export async function POST(request: NextRequest) {
     }
 
     const { shippingAddress, items: cartItems, couponCode } = parsed.data;
+    console.log('Cart items (Stripe):', cartItems);
 
-    await connectDB();
+    const orderItems: Array<{
+      product: string;
+      name: string;
+      quantity: number;
+      price: number;
+      image?: string;
+    }> = [];
+    let itemsPriceCents = 0;
+    const unavailableIds: string[] = [];
+
+    for (const item of cartItems) {
+      if (!item.productId || typeof item.productId !== 'string' || !item.productId.trim()) {
+        return errorResponse('Product ID missing', 400);
+      }
+      const productId = item.productId.trim();
+      if (!mongoose.Types.ObjectId.isValid(productId)) {
+        return errorResponse(`Invalid product ID: ${productId}`, 400);
+      }
+
+      const product = await Product.findById(productId).lean();
+      if (!product) {
+        unavailableIds.push(productId);
+        continue;
+      }
+      if (product.stock < item.quantity) {
+        return errorResponse(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 400);
+      }
+      const priceCents = formatAmountForStripe(product.price) * item.quantity;
+      itemsPriceCents += priceCents;
+      orderItems.push({
+        product: product._id.toString(),
+        name: product.name,
+        quantity: item.quantity,
+        price: product.price,
+        image: typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url,
+      });
+    }
+
+    if (unavailableIds.length > 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Some products are no longer available. Please remove them from your cart and try again.',
+          unavailableProductIds: unavailableIds,
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (orderItems.length === 0) {
+      return errorResponse('No valid items to order', 400);
+    }
 
     let discountAmount = 0;
     let appliedCouponCode: string | undefined;
@@ -49,10 +109,10 @@ export async function POST(request: NextRequest) {
       const coupon = await Coupon.findOne({ code: couponCode.trim().toUpperCase() }).lean();
       if (coupon) {
         const now = new Date();
+        const subtotal = itemsPriceCents / 100;
         const valid =
           (!coupon.expiresAt || now <= new Date(coupon.expiresAt)) &&
           (coupon.maxUses == null || coupon.usedCount < coupon.maxUses);
-        const subtotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
         const minOk = coupon.minOrder == null || subtotal >= coupon.minOrder;
         if (valid && minOk) {
           if (coupon.type === 'percent') {
@@ -64,34 +124,6 @@ export async function POST(request: NextRequest) {
           appliedCouponCode = coupon.code;
         }
       }
-    }
-
-    const orderItems: Array<{
-      product: string;
-      name: string;
-      quantity: number;
-      price: number;
-      image?: string;
-    }> = [];
-    let itemsPriceCents = 0;
-
-    for (const item of cartItems) {
-      const product = await Product.findById(item.productId).lean();
-      if (!product) {
-        return errorResponse(`Product not found: ${item.productId}`, 400);
-      }
-      if (product.stock < item.quantity) {
-        return errorResponse(`Insufficient stock for ${product.name}`, 400);
-      }
-      const priceCents = formatAmountForStripe(product.price) * item.quantity;
-      itemsPriceCents += priceCents;
-      orderItems.push({
-        product: product._id.toString(),
-        name: product.name,
-        quantity: item.quantity,
-        price: product.price,
-        image: typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url,
-      });
     }
 
     const shippingCents =
@@ -118,7 +150,10 @@ export async function POST(request: NextRequest) {
       totalPrice,
       isPaid: false,
       isDelivered: false,
+      orderStatus: 'Processing',
     });
+    await assignOrderIds(order);
+    await order.save();
 
     const lineItems: Array<{
       price_data: {

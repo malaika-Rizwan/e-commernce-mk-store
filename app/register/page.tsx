@@ -64,14 +64,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      const result = await register(email, password, name, confirmPassword);
-      if (result?.requiresVerification) {
-        const params = new URLSearchParams({ email });
-        if (result.emailSent === false) params.set('emailSent', '0');
-        router.push(`/verify-email?${params.toString()}`);
-        router.refresh();
-        return;
-      }
+      await register(email, password, name, confirmPassword);
       router.push('/account');
       router.refresh();
     } catch (err) {

@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 import Product from '@/models/Product';
 import { getSession } from '@/lib/auth';
-import { stripe, formatAmountForStripe } from '@/lib/stripe';
+import { stripe, formatAmountForStripe, isStripeConfigured } from '@/lib/stripe';
 import {
   successResponse,
   errorResponse,
@@ -15,18 +16,22 @@ const Schema = z.object({
   orderId: z.string().optional(),
   items: z.array(
     z.object({
-      productId: z.string(),
+      productId: z.string().min(1),
       quantity: z.number().min(1),
     })
-  ),
+  ).min(1),
 });
 
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session) return unauthorizedResponse();
+    if (!isStripeConfigured()) {
+      return errorResponse('Card payments are not configured', 503);
+    }
 
     const body = await request.json();
+    console.log('Create payment intent body:', JSON.stringify({ ...body, items: body?.items?.length ?? 0 }));
     const parsed = Schema.safeParse(body);
     if (!parsed.success) {
       return errorResponse('Invalid items', 400);
@@ -37,8 +42,12 @@ export async function POST(request: NextRequest) {
 
     let totalCents = 0;
     for (const item of items) {
-      const product = await Product.findById(item.productId).lean();
-      if (!product) return errorResponse(`Product not found: ${item.productId}`, 400);
+      if (!item.productId?.trim()) return errorResponse('Product ID missing', 400);
+      if (!mongoose.Types.ObjectId.isValid(item.productId.trim())) {
+        return errorResponse(`Invalid product ID: ${item.productId}`, 400);
+      }
+      const product = await Product.findById(item.productId.trim()).lean();
+      if (!product) return errorResponse('Product not found in database', 404);
       if (product.stock < item.quantity) {
         return errorResponse(`Insufficient stock for ${product.name}`, 400);
       }

@@ -11,6 +11,7 @@ function VerifyEmailContent() {
   const token = searchParams.get('token') ?? '';
   const emailFromUrl = searchParams.get('email') ?? '';
   const emailNotSent = searchParams.get('emailSent') === '0';
+  const emailFailed = searchParams.get('emailFailed') === '1'; // e.g. Gmail daily limit
 
   const [mode, setMode] = useState<'auto' | 'form'>('auto');
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -181,13 +182,22 @@ function VerifyEmailContent() {
         {mode === 'form' && status !== 'success' && (
           <>
             <h1 className="text-2xl font-bold text-[#49474D]">Confirm your email</h1>
-            {emailNotSent && (
+            {emailFailed && (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                The verification email could not be sent right now (e.g. daily sending limit). Your account was created. Use <strong>Resend code</strong> below in a few hours to receive the code, or try again tomorrow.
+              </div>
+            )}
+            {emailNotSent && !emailFailed && (
               <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                 The server is not configured to send email yet, so you will not receive a verification code. Ask the site administrator to add SMTP settings (SMTP_HOST, SMTP_USER, SMTP_PASS) to enable signup emails.
               </div>
             )}
             <p className="mt-2 text-[#49474D]/80">
-              {emailNotSent ? 'If the administrator has fixed email, enter the 6-digit code you received below.' : 'We sent a 6-digit verification code to your email. Enter it below to complete registration.'}
+              {emailFailed
+                ? 'When you receive the code (after using Resend code), enter it below to complete registration.'
+                : emailNotSent
+                  ? 'If the administrator has fixed email, enter the 6-digit code you received below.'
+                  : 'We sent a 6-digit verification code to your email. Enter it below to complete registration.'}
             </p>
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {message && (

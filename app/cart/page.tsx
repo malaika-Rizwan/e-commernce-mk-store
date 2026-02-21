@@ -1,8 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useAppDispatch, useCartItems, useCartItemCount, useCartSubtotal } from '@/store/hooks';
+import { useAppDispatch, useCartItems, useCartItemCount } from '@/store/hooks';
 import { removeItem, updateQuantity } from '@/store/slices/cartSlice';
 import { Button } from '@/components/ui/Button';
 import { OrderSummary } from '@/components/cart/OrderSummary';
@@ -10,9 +11,31 @@ import { OrderSummary } from '@/components/cart/OrderSummary';
 const QUANTITY_OPTIONS = [1, 2, 3, 4, 5, 10, 15, 20];
 
 export default function CartPage() {
+  const [mounted, setMounted] = useState(false);
   const items = useCartItems();
   const itemCount = useCartItemCount();
   const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Avoid hydration mismatch: cart comes from client (Redux/localStorage), so server
+  // and first client render must be identical. Show consistent shell until mounted.
+  if (!mounted) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="mb-8 text-3xl font-bold text-gray-900 dark:text-white">
+          Shopping cart
+        </h1>
+        <div className="animate-pulse space-y-4 rounded-lg bg-gray-100 dark:bg-gray-800 p-6">
+          <div className="h-4 w-3/4 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-1/2 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-4 w-2/3 rounded bg-gray-200 dark:bg-gray-700" />
+        </div>
+      </div>
+    );
+  }
 
   if (itemCount === 0) {
     return (

@@ -15,7 +15,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void | { requiresTwoFactor: true; tempToken: string }>;
   verifyTwoFactor: (tempToken: string, otp: string) => Promise<void>;
-  register: (email: string, password: string, name: string, confirmPassword?: string) => Promise<{ requiresVerification?: boolean; emailSent?: boolean } | void>;
+  register: (email: string, password: string, name: string, confirmPassword?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -94,9 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Registration failed');
-      if (data.data?.requiresVerification) {
-        return { requiresVerification: true, emailSent: data.data.emailSent };
-      }
       await refreshUser();
     },
     [refreshUser]

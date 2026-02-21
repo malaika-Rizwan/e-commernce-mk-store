@@ -8,6 +8,16 @@ export interface IUserAddress {
   country?: string;
 }
 
+export interface IUserAddressFull {
+  fullName: string;
+  phone: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  isDefault?: boolean;
+}
+
 export interface IUser {
   _id: Types.ObjectId;
   email: string;
@@ -17,6 +27,7 @@ export interface IUser {
   avatar?: string;
   phone?: string;
   address?: IUserAddress;
+  addresses?: IUserAddressFull[];
   isVerified?: boolean;
   verificationToken?: string;
   verificationTokenExpires?: Date;
@@ -77,9 +88,14 @@ export interface IOrderItem {
   image?: string;
 }
 
+export type OrderStatus = 'pending' | 'Processing' | 'Shipped' | 'Out for Delivery' | 'Delivered' | 'cancelled';
+
 export interface IOrder {
   _id: Types.ObjectId;
   user: Types.ObjectId;
+  orderId?: string;
+  trackingNumber?: string;
+  estimatedDelivery?: Date;
   items: IOrderItem[];
   shippingAddress: {
     fullName: string;
@@ -102,6 +118,7 @@ export interface IOrder {
   discountAmount?: number;
   couponCode?: string;
   totalPrice: number;
+  orderStatus?: OrderStatus;
   status?: OrderStatus;
   isPaid: boolean;
   paidAt?: Date;
@@ -110,8 +127,6 @@ export interface IOrder {
   createdAt: Date;
   updatedAt: Date;
 }
-
-export type OrderStatus = 'pending' | 'shipped' | 'delivered' | 'cancelled';
 
 export type CartItem = {
   productId: string;

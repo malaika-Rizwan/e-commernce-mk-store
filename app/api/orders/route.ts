@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
-import Order from '@/models/Order';
+import Order, { assignOrderIds } from '@/models/Order';
 import Product from '@/models/Product';
 import { getSession } from '@/lib/auth';
 import {
@@ -14,10 +15,10 @@ import {
 const CreateOrderSchema = z.object({
   items: z.array(
     z.object({
-      productId: z.string(),
-      quantity: z.number().min(1),
+      productId: z.string().min(1, 'Product ID is required'),
+      quantity: z.number().min(1, 'Quantity must be at least 1'),
     })
-  ),
+  ).min(1, 'Cart is empty'),
   shippingAddress: z.object({
     fullName: z.string().min(1),
     address: z.string().min(1),
@@ -65,7 +66,10 @@ export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) return unauthorizedResponse();
 
+    await connectDB();
+
     const body = await request.json();
+    console.log('Orders POST body:', JSON.stringify({ ...body, items: body?.items?.length ?? 0 }));
     const parsed = CreateOrderSchema.safeParse(body);
     if (!parsed.success) {
       const msg = parsed.error.errors.map((e) => e.message).join(', ');
@@ -73,8 +77,6 @@ export async function POST(request: NextRequest) {
     }
 
     const { items, shippingAddress, paymentMethod } = parsed.data;
-
-    await connectDB();
 
     const orderItems: Array<{
       product: string;
@@ -84,14 +86,24 @@ export async function POST(request: NextRequest) {
       image?: string;
     }> = [];
     let itemsPrice = 0;
+    const unavailableIds: string[] = [];
 
     for (const item of items) {
-      const product = await Product.findById(item.productId).lean();
+      if (!item.productId?.trim()) {
+        return errorResponse('Product ID missing', 400);
+      }
+      const productId = item.productId.trim();
+      if (!mongoose.Types.ObjectId.isValid(productId)) {
+        return errorResponse(`Invalid product ID: ${productId}`, 400);
+      }
+
+      const product = await Product.findById(productId).lean();
       if (!product) {
-        return errorResponse(`Product not found: ${item.productId}`, 400);
+        unavailableIds.push(productId);
+        continue;
       }
       if (product.stock < item.quantity) {
-        return errorResponse(`Insufficient stock for ${product.name}`, 400);
+        return errorResponse(`Insufficient stock for ${product.name}. Available: ${product.stock}`, 400);
       }
       const linePrice = product.price * item.quantity;
       itemsPrice += linePrice;
@@ -102,6 +114,21 @@ export async function POST(request: NextRequest) {
         price: product.price,
         image: typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url,
       });
+    }
+
+    if (unavailableIds.length > 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Some products are no longer available. Please remove them from your cart and try again.',
+          unavailableProductIds: unavailableIds,
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (orderItems.length === 0) {
+      return errorResponse('No valid items to order', 400);
     }
 
     const shippingPrice = itemsPrice > 100 ? 0 : 10;
@@ -119,7 +146,10 @@ export async function POST(request: NextRequest) {
       totalPrice,
       isPaid: false,
       isDelivered: false,
+      orderStatus: 'Processing',
     });
+    await assignOrderIds(order);
+    await order.save();
 
     return successResponse(order, 201);
   } catch (err) {

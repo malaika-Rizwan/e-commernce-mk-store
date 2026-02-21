@@ -27,7 +27,7 @@ function sanitizeText(value: string, maxLen: number): string {
 export async function POST(request: NextRequest) {
   try {
     const identifier = getClientIdentifier(request);
-    const limit = rateLimit(identifier, 'contact', { windowMs: 60 * 1000, max: 5 });
+    const limit = await rateLimit(identifier, 'contact', { windowMs: 60 * 1000, max: 5 });
     if (!limit.success) {
       return errorResponse('Too many requests. Please try again later.', 429);
     }

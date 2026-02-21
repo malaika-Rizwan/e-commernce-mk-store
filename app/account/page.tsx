@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { AccountProfileSection } from '@/components/account/AccountProfileSection';
+import { AccountAddressesSection } from '@/components/account/AccountAddressesSection';
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -19,6 +20,7 @@ export default async function AccountPage() {
       </h1>
       <div className="space-y-8">
         <AccountProfileSection />
+        <AccountAddressesSection />
       </div>
     </div>
   );

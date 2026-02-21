@@ -4,6 +4,8 @@ import { cookies } from 'next/headers';
 import { getSession } from '@/lib/auth';
 import { Card } from '@/components/ui/Card';
 import { MarkDeliveredButton } from './MarkDeliveredButton';
+import { OrderStatusSelect } from './OrderStatusSelect';
+import { DeleteOrderButton } from './DeleteOrderButton';
 
 async function getOrder(id: string, token: string | undefined) {
   if (!token) return null;
@@ -44,11 +46,23 @@ export default async function AdminOrderDetailPage({
       >
         ← Back to orders
       </Link>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Order #{order._id.slice(-8)}
-        </h1>
-        <div className="flex items-center gap-2">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Order {order.orderId ?? `#${order._id.slice(-8)}`}
+          </h1>
+          {order.trackingNumber && (
+            <p className="mt-1 font-mono text-sm text-gray-600 dark:text-gray-400">
+              Tracking: {order.trackingNumber}
+            </p>
+          )}
+          {order.estimatedDelivery && (
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              Est. delivery: {new Date(order.estimatedDelivery).toLocaleDateString('en-US')}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
           <span
             className={`rounded-full px-3 py-1 text-sm ${
               order.isPaid
@@ -58,16 +72,18 @@ export default async function AdminOrderDetailPage({
           >
             {order.isPaid ? 'Paid' : 'Pending'}
           </span>
-          {order.isDelivered && (
-            <span className="rounded-full bg-blue-100 px-3 py-1 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-              Delivered
-            </span>
+          {(order.orderStatus || order.isDelivered) && (
+            <OrderStatusSelect
+              orderId={order._id}
+              currentStatus={order.orderStatus ?? (order.isDelivered ? 'Delivered' : 'Processing')}
+            />
           )}
           <MarkDeliveredButton
             orderId={order._id}
             isPaid={order.isPaid}
             isDelivered={order.isDelivered}
           />
+          <DeleteOrderButton orderId={order._id} orderDisplayId={order.orderId ?? order._id} />
         </div>
       </div>
 

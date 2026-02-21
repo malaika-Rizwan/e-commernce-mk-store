@@ -1,13 +1,63 @@
-import { sendEmail } from '@/lib/sendEmail';
+import { sendEmail, sendEmailNonBlocking } from '@/lib/sendEmail';
 
 const ADMIN_EMAIL = 'malaikarizwan121@gmail.com';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 const SUPPORT_EMAIL = process.env.SMTP_FROM ?? 'support@mkstore.com';
 
+const OTP_EXPIRY_MINUTES = 10;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Shared professional OTP email template – MK Store branding, #EBBB69 highlight, 10 min expiry. */
+function getOtpEmailHtml(options: {
+  userName: string;
+  otpCode: string;
+  title: string;
+  bodyMessage: string;
+  expiryMinutes?: number;
+  extraHtml?: string;
+}): string {
+  const { userName, otpCode, title, bodyMessage, expiryMinutes = OTP_EXPIRY_MINUTES, extraHtml = '' } = options;
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} - MK Store</title></head>
+<body style="margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f3f4f6;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+    <div style="background:#EBBB69;padding:24px 28px;">
+      <h1 style="margin:0;font-size:22px;color:#49474D;font-weight:700;">MK Store</h1>
+      <p style="margin:8px 0 0;font-size:14px;color:#49474D;opacity:0.95;">${escapeHtml(title)}</p>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Hi ${escapeHtml(userName)},</p>
+      <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">${bodyMessage}</p>
+      <div style="background:#f9fafb;border:2px solid #EBBB69;border-radius:10px;padding:20px 24px;text-align:center;margin:0 0 24px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#6b7280;letter-spacing:0.05em;text-transform:uppercase;">Your code</p>
+        <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#49474D;font-family:ui-monospace,monospace;">${escapeHtml(otpCode)}</p>
+      </div>
+      <p style="margin:0 0 20px;font-size:13px;color:#6b7280;">This code expires in <strong>${expiryMinutes} minutes</strong>. Do not share it with anyone.</p>
+      ${extraHtml}
+      <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">&copy; ${new Date().getFullYear()} MK Store. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
 export interface OrderConfirmationData {
   to: string;
   userName: string;
   orderId: string;
+  trackingNumber?: string;
+  estimatedDelivery?: string;
   totalPrice: number;
   items: Array<{ name: string; quantity: number; price: number }>;
   shippingAddress: {
@@ -20,21 +70,21 @@ export interface OrderConfirmationData {
   };
 }
 
-function getEstimatedDelivery(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 5);
-  return d.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
 export async function sendOrderConfirmation(
   data: OrderConfirmationData
 ): Promise<void> {
-  const estimatedDelivery = getEstimatedDelivery();
+  const estimatedDelivery =
+    data.estimatedDelivery ??
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 5);
+      return d.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    })();
 
   const itemsRows = data.items
     .map(
@@ -58,7 +108,8 @@ export async function sendOrderConfirmation(
   <h2 style="color: #49474D; font-size: 20px;">Your order is confirmed</h2>
   <p>Hi ${escapeHtml(data.userName)},</p>
   <p>Thank you for your order. We&apos;ve received it and will get it to you soon.</p>
-  <p><strong>Order ID:</strong> <span style="font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">#${data.orderId.slice(-8).toUpperCase()}</span></p>
+  <p><strong>Order ID:</strong> <span style="font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${escapeHtml(data.orderId)}</span></p>
+  ${data.trackingNumber ? `<p><strong>Tracking number:</strong> <span style="font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${escapeHtml(data.trackingNumber)}</span></p>` : ''}
   <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
     <thead>
       <tr style="background: #49474D; color: #fff;">
@@ -103,8 +154,8 @@ MK Store – Order Confirmation
 
 Hi ${data.userName},
 
-Order ID: #${data.orderId.slice(-8).toUpperCase()}
-Total: $${data.totalPrice.toFixed(2)}
+Order ID: ${data.orderId}
+${data.trackingNumber ? `Tracking: ${data.trackingNumber}\n` : ''}Total: $${data.totalPrice.toFixed(2)}
 
 Items:
 ${data.items.map((i) => `  ${i.name} x ${i.quantity} — $${(i.quantity * i.price).toFixed(2)}`).join('\n')}
@@ -129,16 +180,6 @@ Support: ${SUPPORT_EMAIL}
   });
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-
 export interface ContactFormData {
   name: string;
   email: string;
@@ -146,7 +187,40 @@ export interface ContactFormData {
   message: string;
 }
 
-/** Send email verification with 6-digit code (signup). Returns true if sent, false if SMTP not configured or send failed. */
+/** Send email verification link (signup). Token expires in 24 hours. Returns true if sent. */
+export async function sendVerificationLinkEmail(data: {
+  email: string;
+  userName: string;
+  verificationToken: string;
+}): Promise<boolean> {
+  const verifyUrl = `${APP_URL}/verify-email?token=${encodeURIComponent(data.verificationToken)}`;
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Verify your email - MK Store</title></head>
+<body style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #374151; line-height: 1.6;">
+  <div style="background: #EBBB69; padding: 24px; border-radius: 12px 12px 0 0;">
+    <h1 style="margin: 0; font-size: 24px; color: #49474D;">MK Store</h1>
+    <p style="margin: 8px 0 0; font-size: 14px; color: #49474D;">Verify your email</p>
+  </div>
+  <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+    <p>Hi ${escapeHtml(data.userName)},</p>
+    <p>Please verify your email to activate your account. This link expires in 24 hours.</p>
+    <p style="margin: 24px 0;">
+      <a href="${verifyUrl}" style="display: inline-block; background: #EBBB69; color: #49474D; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600;">Verify my email</a>
+    </p>
+    <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${escapeHtml(verifyUrl)}</p>
+    <p style="color: #6b7280; font-size: 14px;">If you didn&apos;t create an account, you can ignore this email.</p>
+    <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">&copy; ${new Date().getFullYear()} MK Store.</p>
+  </div>
+</body>
+</html>
+  `.trim();
+  const text = `Verify your email - MK Store\n\nHi ${data.userName},\n\nClick to verify: ${verifyUrl}\n\nThis link expires in 24 hours.\n\n© ${new Date().getFullYear()} MK Store.`;
+  return sendEmail({ to: data.email, subject: 'Verify your email - MK Store', html, text });
+}
+
+/** Send email verification with 6-digit code (signup). Uses shared OTP template, 10 min expiry. */
 export async function sendVerificationEmail(data: {
   email: string;
   userName: string;
@@ -156,61 +230,113 @@ export async function sendVerificationEmail(data: {
   const verifyUrl = data.verificationToken
     ? `${APP_URL}/verify-email?token=${encodeURIComponent(data.verificationToken)}`
     : null;
-  const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Confirm your email - MK Store</title></head>
-<body style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #374151; line-height: 1.6;">
-  <div style="background: #EBBB69; padding: 24px; border-radius: 12px 12px 0 0;">
-    <h1 style="margin: 0; font-size: 24px; color: #49474D;">MK Store</h1>
-    <p style="margin: 8px 0 0; font-size: 14px; color: #49474D;">Confirm your email</p>
-  </div>
-  <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-    <p>Hi ${escapeHtml(data.userName)},</p>
-    <p>Use the code below to complete your registration. This code expires in 15 minutes.</p>
-    <p style="margin: 20px 0; font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #49474D; background: #f3f4f6; padding: 16px 24px; border-radius: 8px; text-align: center;">${escapeHtml(data.verificationCode)}</p>
-    <p>Enter this code on the MK Store verification page to activate your account.</p>
-    ${verifyUrl ? `<p style="margin-top: 20px; font-size: 14px; color: #6b7280;">Or <a href="${verifyUrl}" style="color: #EBBB69;">click here</a> to verify.</p>` : ''}
-    <p style="color: #6b7280; font-size: 14px;">If you didn&apos;t create an account, you can ignore this email.</p>
-    <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">&copy; ${new Date().getFullYear()} MK Store.</p>
-  </div>
-</body>
-</html>
-  `.trim();
-  const text = `Confirm your email - MK Store\n\nHi ${data.userName},\n\nYour verification code is: ${data.verificationCode}\n\nEnter this code on MK Store to complete registration. Code expires in 15 minutes.\n\n${verifyUrl ? `Or open this link: ${verifyUrl}\n\n` : ''}© ${new Date().getFullYear()} MK Store.`;
+  const extraHtml = verifyUrl
+    ? `<p style="margin:0 0 16px;font-size:14px;color:#6b7280;">Or <a href="${verifyUrl}" style="color:#EBBB69;font-weight:600;">click here</a> to verify with the link.</p>`
+    : '';
+  const html = getOtpEmailHtml({
+    userName: data.userName,
+    otpCode: data.verificationCode,
+    title: 'Confirm your email',
+    bodyMessage: 'Use the code below to complete your registration and activate your account.',
+    expiryMinutes: OTP_EXPIRY_MINUTES,
+    extraHtml,
+  });
+  const text = `Confirm your email - MK Store\n\nHi ${data.userName},\n\nYour verification code is: ${data.verificationCode}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.\n\n${verifyUrl ? `Or open this link: ${verifyUrl}\n\n` : ''}© ${new Date().getFullYear()} MK Store.`;
   return sendEmail({ to: data.email, subject: 'Your verification code - MK Store', html, text });
 }
 
-/** Send password reset link. */
+/** Non-blocking: trigger verification email send without awaiting. Use after saving OTP to DB. */
+export function sendVerificationEmailNonBlocking(data: {
+  email: string;
+  userName: string;
+  verificationToken?: string;
+  verificationCode: string;
+}): void {
+  const verifyUrl = data.verificationToken
+    ? `${APP_URL}/verify-email?token=${encodeURIComponent(data.verificationToken)}`
+    : null;
+  const extraHtml = verifyUrl
+    ? `<p style="margin:0 0 16px;font-size:14px;color:#6b7280;">Or <a href="${verifyUrl}" style="color:#EBBB69;font-weight:600;">click here</a> to verify with the link.</p>`
+    : '';
+  const html = getOtpEmailHtml({
+    userName: data.userName,
+    otpCode: data.verificationCode,
+    title: 'Confirm your email',
+    bodyMessage: 'Use the code below to complete your registration and activate your account.',
+    expiryMinutes: OTP_EXPIRY_MINUTES,
+    extraHtml,
+  });
+  const text = `Confirm your email - MK Store\n\nHi ${data.userName},\n\nYour verification code is: ${data.verificationCode}\n\nThis code expires in ${OTP_EXPIRY_MINUTES} minutes.\n\n${verifyUrl ? `Or open: ${verifyUrl}\n\n` : ''}© ${new Date().getFullYear()} MK Store.`;
+  sendEmailNonBlocking({ to: data.email, subject: 'Your verification code - MK Store', html, text });
+}
+
+/** Professional password reset email – MK Store branding, #EBBB69, 1 hour expiry. */
 export async function sendPasswordResetEmail(data: {
   email: string;
   resetToken: string;
   userName?: string;
 }): Promise<void> {
   const resetUrl = `${APP_URL}/reset-password?token=${encodeURIComponent(data.resetToken)}`;
+  const userName = data.userName?.trim() || 'there';
   const html = `
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Reset your password - MK Store</title></head>
-<body style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #374151; line-height: 1.6;">
-  <div style="background: #EBBB69; padding: 24px; border-radius: 12px 12px 0 0;">
-    <h1 style="margin: 0; font-size: 24px; color: #49474D;">MK Store</h1>
-    <p style="margin: 8px 0 0; font-size: 14px; color: #49474D;">Reset your password</p>
-  </div>
-  <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
-    <p>Hi ${data.userName ? escapeHtml(data.userName) : 'there'},</p>
-    <p>You requested a password reset. Click the button below to set a new password. This link expires in 1 hour.</p>
-    <p style="margin: 24px 0;">
-      <a href="${resetUrl}" style="display: inline-block; background: #EBBB69; color: #49474D; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600;">Reset password</a>
-    </p>
-    <p style="color: #6b7280; font-size: 14px;">If you didn&apos;t request this, you can ignore this email.</p>
-    <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">&copy; ${new Date().getFullYear()} MK Store.</p>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset your password - MK Store</title></head>
+<body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+    <div style="background:#EBBB69;padding:24px 28px;">
+      <h1 style="margin:0;font-size:22px;color:#49474D;font-weight:700;">MK Store</h1>
+      <p style="margin:8px 0 0;font-size:14px;color:#49474D;opacity:0.95;">Reset your password</p>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Hi ${escapeHtml(userName)},</p>
+      <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">You requested a password reset. Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+      <p style="margin:0 0 24px;">
+        <a href="${resetUrl}" style="display:inline-block;background:#EBBB69;color:#49474D;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;">Reset password</a>
+      </p>
+      <p style="margin:0 0 20px;font-size:13px;color:#6b7280;">If you didn&apos;t request this, you can ignore this email.</p>
+      <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">&copy; ${new Date().getFullYear()} MK Store. All rights reserved.</p>
+    </div>
   </div>
 </body>
 </html>
   `.trim();
-  const text = `Reset your password - MK Store\n\nReset link: ${resetUrl}\n\nThis link expires in 1 hour.\n\n© ${new Date().getFullYear()} MK Store.`;
+  const text = `Reset your password - MK Store\n\nHi ${userName},\n\nReset link: ${resetUrl}\n\nThis link expires in 1 hour.\n\n© ${new Date().getFullYear()} MK Store.`;
   await sendEmail({ to: data.email, subject: 'Reset your password - MK Store', html, text });
+}
+
+/** Non-blocking: trigger password reset email without awaiting. */
+export function sendPasswordResetEmailNonBlocking(data: {
+  email: string;
+  resetToken: string;
+  userName?: string;
+}): void {
+  const resetUrl = `${APP_URL}/reset-password?token=${encodeURIComponent(data.resetToken)}`;
+  const userName = data.userName?.trim() || 'there';
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset your password - MK Store</title></head>
+<body style="margin:0;font-family:system-ui,-apple-system,sans-serif;background:#f3f4f6;padding:24px;">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+    <div style="background:#EBBB69;padding:24px 28px;">
+      <h1 style="margin:0;font-size:22px;color:#49474D;font-weight:700;">MK Store</h1>
+      <p style="margin:8px 0 0;font-size:14px;color:#49474D;opacity:0.95;">Reset your password</p>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Hi ${escapeHtml(userName)},</p>
+      <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">You requested a password reset. Click the button below. This link expires in <strong>1 hour</strong>.</p>
+      <p style="margin:0 0 24px;">
+        <a href="${resetUrl}" style="display:inline-block;background:#EBBB69;color:#49474D;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;">Reset password</a>
+      </p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">&copy; ${new Date().getFullYear()} MK Store.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  const text = `Reset your password - MK Store\n\nReset link: ${resetUrl}\n\nExpires in 1 hour.\n\n© ${new Date().getFullYear()} MK Store.`;
+  sendEmailNonBlocking({ to: data.email, subject: 'Reset your password - MK Store', html, text });
 }
 
 /** Send contact form submission to admin. */

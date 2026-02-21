@@ -5,6 +5,29 @@ import { useAuth } from '@/context/AuthContext';
 
 const WISHLIST_STORAGE_KEY = 'ecom-wishlist-ids';
 
+const inFlightByUserId = new Map<string, Promise<Set<string>>>();
+
+async function fetchWishlistIdsForUser(userId: string): Promise<Set<string>> {
+  const existing = inFlightByUserId.get(userId);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const res = await fetch('/api/wishlist', { credentials: 'include' });
+      if (!res.ok) return new Set<string>();
+      const json = await res.json();
+      const products = json.data?.products ?? [];
+      const productIds = products.map((p: { _id?: string }) => p._id?.toString()).filter(Boolean);
+      return new Set(productIds);
+    } catch {
+      return new Set<string>();
+    } finally {
+      inFlightByUserId.delete(userId);
+    }
+  })();
+  inFlightByUserId.set(userId, promise);
+  return promise;
+}
+
 export function useWishlistIds(): {
   ids: Set<string>;
   loading: boolean;
@@ -14,45 +37,41 @@ export function useWishlistIds(): {
   refresh: () => Promise<void>;
 } {
   const { user } = useAuth();
+  const userId = user?._id ?? '';
   const [ids, setIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  const fetchIds = useCallback(async () => {
-    if (!user) {
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem(WISHLIST_STORAGE_KEY);
-          const arr = raw ? (JSON.parse(raw) as string[]) : [];
-          setIds(new Set(Array.isArray(arr) ? arr : []));
-        } catch {
+  const fetchIds = useCallback(
+    async (forceRefresh = false) => {
+      if (!user) {
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem(WISHLIST_STORAGE_KEY);
+            const arr = raw ? (JSON.parse(raw) as string[]) : [];
+            setIds(new Set(Array.isArray(arr) ? arr : []));
+          } catch {
+            setIds(new Set());
+          }
+        } else {
           setIds(new Set());
         }
-      } else {
-        setIds(new Set());
-      }
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await fetch('/api/wishlist', { credentials: 'include' });
-      if (!res.ok) {
-        setIds(new Set());
+        setLoading(false);
         return;
       }
-      const json = await res.json();
-      const products = json.data?.products ?? [];
-      const productIds = products.map((p: { _id?: string }) => p._id?.toString()).filter(Boolean);
-      setIds(new Set(productIds));
-    } catch {
-      setIds(new Set());
-    } finally {
+      if (forceRefresh) inFlightByUserId.delete(user._id);
+      setLoading(true);
+      const next = await fetchWishlistIdsForUser(user._id);
+      setIds(next);
       setLoading(false);
-    }
-  }, [user]);
+    },
+    [userId]
+  );
 
   useEffect(() => {
     fetchIds();
   }, [fetchIds]);
+
+  const refresh = useCallback(() => fetchIds(true), [fetchIds]);
 
   const add = useCallback(
     async (productId: string) => {
@@ -111,5 +130,5 @@ export function useWishlistIds(): {
     [ids, add, remove]
   );
 
-  return { ids, loading, add, remove, toggle, refresh: fetchIds };
+  return { ids, loading, add, remove, toggle, refresh };
 }

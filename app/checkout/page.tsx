@@ -14,12 +14,33 @@ import {
   type ShippingAddressInput,
 } from '@/lib/validations/checkout';
 
+interface SavedAddress {
+  _id: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  country: string;
+  isDefault?: boolean;
+}
+
+const STEPS = ['Cart', 'Address', 'Order summary', 'Place order'];
+
+interface PaymentMethod {
+  id: string;
+  label: string;
+  description: string;
+  route: string;
+}
+
 export default function CheckoutPage() {
   const { user, loading: authLoading } = useAuth();
   const items = useCartItems();
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [codLoading, setCodLoading] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [address, setAddress] = useState<ShippingAddressInput>({
     fullName: '',
@@ -31,12 +52,51 @@ export default function CheckoutPage() {
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ShippingAddressInput, string>>>({});
   const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const currentStep = 2;
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login?from=/checkout');
     }
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/users/addresses', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.data?.addresses) {
+          setSavedAddresses(data.data.addresses);
+          const defaultAddr = data.data.addresses.find((a: SavedAddress) => a.isDefault);
+          if (defaultAddr) {
+            setSelectedAddressId(defaultAddr._id);
+            setAddress({
+              fullName: defaultAddr.fullName,
+              address: defaultAddr.address,
+              city: defaultAddr.city,
+              postalCode: defaultAddr.postalCode,
+              country: defaultAddr.country,
+              phone: defaultAddr.phone,
+            });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    fetch('/api/config/payments', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data?.paymentMethods)) {
+          setPaymentMethods(data.data.paymentMethods);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPaymentMethodsLoading(false));
+  }, []);
 
   if (authLoading || !user) {
     return (
@@ -75,27 +135,21 @@ export default function CheckoutPage() {
     }
     return {
       shippingAddress: parsed.data,
-      items: items.map((i) => ({
-        productId: i.productId,
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
-        image: i.image,
-      })),
+      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
       ...(couponCode ? { couponCode } : {}),
     };
   }
 
-  async function handlePayWithCard(e: React.FormEvent) {
+  async function handlePayment(e: React.FormEvent, method: PaymentMethod) {
     e.preventDefault();
     setError('');
     setFieldErrors({});
     const payload = getPayload();
     if (!payload) return;
 
-    setLoading(true);
+    setLoadingId(method.id);
     try {
-      const res = await fetch('/api/checkout', {
+      const res = await fetch(method.route, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -114,62 +168,64 @@ export default function CheckoutPage() {
         window.location.href = data.data.url;
         return;
       }
-      toast.error('Invalid response from server');
-      setError('Invalid response from server');
-    } catch {
-      setError('Network error. Please try again.');
-      toast.error('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCashOnDelivery(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setFieldErrors({});
-    const payload = getPayload();
-    if (!payload) return;
-
-    setCodLoading(true);
-    try {
-      const res = await fetch('/api/checkout/cod', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        const msg = data.error ?? 'Order failed';
-        setError(msg);
-        toast.error(msg);
-        return;
-      }
-
       const orderId = data.data?.orderId;
       if (orderId) {
         router.push(`/order/success?order_id=${orderId}`);
         return;
       }
       toast.error('Invalid response from server');
+      setError('Invalid response from server');
     } catch {
       setError('Network error. Please try again.');
       toast.error('Network error. Please try again.');
     } finally {
-      setCodLoading(false);
+      setLoadingId(null);
     }
   }
 
-  const anyLoading = loading || codLoading;
+  const anyLoading = loadingId !== null;
+
+  function selectSavedAddress(a: SavedAddress) {
+    setSelectedAddressId(a._id);
+    setAddress({
+      fullName: a.fullName,
+      address: a.address,
+      city: a.city,
+      postalCode: a.postalCode,
+      country: a.country,
+      phone: a.phone,
+    });
+    setFieldErrors({});
+  }
 
   return (
     <div className="min-h-screen bg-pageBg">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="mb-8 text-3xl font-bold text-darkBase">
+        <h1 className="mb-6 text-3xl font-bold text-darkBase">
           Checkout
         </h1>
+
+        {/* Step progress */}
+        <nav className="mb-8 flex flex-wrap items-center gap-2 text-sm">
+          {STEPS.map((step, i) => (
+            <span key={step} className="flex items-center gap-2">
+              <span
+                className={
+                  i + 1 === currentStep
+                    ? 'font-semibold text-primaryAccent'
+                    : i + 1 < currentStep
+                      ? 'text-gray-500'
+                      : 'text-gray-400'
+                }
+              >
+                {i + 1}. {step}
+              </span>
+              {i < STEPS.length - 1 && (
+                <span className="text-gray-300 dark:text-gray-600">→</span>
+              )}
+            </span>
+          ))}
+        </nav>
 
         <form onSubmit={(e) => e.preventDefault()}>
           <div className="grid gap-8 lg:grid-cols-3">
@@ -179,6 +235,47 @@ export default function CheckoutPage() {
                 <h2 className="mb-4 text-lg font-semibold text-darkBase">
                   Shipping address
                 </h2>
+                {savedAddresses.length > 0 && (
+                  <div className="mb-4 space-y-2">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Use a saved address</p>
+                    <div className="flex flex-wrap gap-2">
+                      {savedAddresses.map((a) => (
+                        <button
+                          key={a._id}
+                          type="button"
+                          onClick={() => selectSavedAddress(a)}
+                          className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                            selectedAddressId === a._id
+                              ? 'border-primaryAccent bg-primaryAccent/10 text-darkBase'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                          }`}
+                        >
+                          {a.fullName}, {a.city}
+                          {a.isDefault && (
+                            <span className="ml-1 text-xs text-primaryAccent">(default)</span>
+                          )}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAddressId(null);
+                          setAddress({
+                            fullName: '',
+                            address: '',
+                            city: '',
+                            postalCode: '',
+                            country: '',
+                            phone: '',
+                          });
+                        }}
+                        className="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-gray-400 hover:text-gray-700 dark:border-gray-600 dark:text-gray-400"
+                      >
+                        Add new
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {error && (
                   <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                     {error}
@@ -186,7 +283,10 @@ export default function CheckoutPage() {
                 )}
                 <ShippingAddressForm
                   value={address}
-                  onChange={setAddress}
+                  onChange={(v) => {
+                    setAddress(v);
+                    setSelectedAddressId(null);
+                  }}
                   errors={fieldErrors}
                 />
               </div>
@@ -200,31 +300,38 @@ export default function CheckoutPage() {
                   onCouponChange={setCouponCode}
                 />
                 <div className="mt-6 space-y-3">
-                  <Button
-                    type="button"
-                    variant="primary"
-                    fullWidth
-                    onClick={handlePayWithCard}
-                    isLoading={loading}
-                    disabled={anyLoading}
-                    className="bg-primaryAccent hover:bg-primaryAccent/90"
-                  >
-                    Pay with Card
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    fullWidth
-                    onClick={handleCashOnDelivery}
-                    isLoading={codLoading}
-                    disabled={anyLoading}
-                    className="border-darkBase/30 text-darkBase hover:bg-darkBase/5"
-                  >
-                    Cash on Delivery
-                  </Button>
+                  {paymentMethodsLoading ? (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800">
+                      Loading payment options…
+                    </div>
+                  ) : paymentMethods.length === 0 ? (
+                    <p className="text-center text-sm text-amber-600 dark:text-amber-400">
+                      No payment methods configured. Add gateway env vars (see docs).
+                    </p>
+                  ) : (
+                    paymentMethods.map((method) => (
+                      <Button
+                        key={method.id}
+                        type="button"
+                        variant={method.id === 'cod' ? 'outline' : 'primary'}
+                        fullWidth
+                        onClick={(e) => handlePayment(e, method)}
+                        isLoading={loadingId === method.id}
+                        disabled={anyLoading}
+                        className={
+                          method.id === 'cod'
+                            ? 'border-darkBase/30 text-darkBase hover:bg-darkBase/5'
+                            : 'bg-primaryAccent hover:bg-primaryAccent/90'
+                        }
+                        title={method.description}
+                      >
+                        {method.label}
+                      </Button>
+                    ))
+                  )}
                 </div>
                 <p className="mt-3 text-center text-xs text-gray-500">
-                  Pay with Card redirects to Stripe to complete payment securely.
+                  Payment options are loaded from your config. Redirect gateways open in a new step to complete payment.
                 </p>
               </div>
             </div>

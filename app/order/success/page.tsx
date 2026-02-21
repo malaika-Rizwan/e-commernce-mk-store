@@ -9,6 +9,10 @@ import { Button } from '@/components/ui/Button';
 
 interface OrderSummary {
   _id: string;
+  orderId?: string;
+  trackingNumber?: string;
+  estimatedDelivery?: string;
+  orderStatus?: string;
   items: Array<{ name: string; quantity: number; price: number }>;
   totalPrice: number;
   shippingAddress: { fullName: string; address: string; city: string; postalCode: string; country: string };
@@ -72,9 +76,11 @@ export default function OrderSuccessPage() {
     }
   }, [order, orderIdParam, dispatch, cleared]);
 
-  const estimatedDelivery = order
-    ? new Date(new Date(order.createdAt).getTime() + 5 * 24 * 60 * 60 * 1000)
-    : null;
+  const estimatedDelivery = order?.estimatedDelivery
+    ? new Date(order.estimatedDelivery)
+    : order
+      ? new Date(new Date(order.createdAt).getTime() + 5 * 24 * 60 * 60 * 1000)
+      : null;
 
   if (loading) {
     return (
@@ -123,10 +129,30 @@ export default function OrderSuccessPage() {
 
           {order && (
             <div className="mt-8 rounded-2xl bg-cardBg p-6 shadow-soft">
-              <p className="text-sm font-medium text-gray-500">Order ID</p>
-              <p className="mt-1 font-mono text-lg font-semibold text-darkBase">
-                #{order._id.slice(-8).toUpperCase()}
-              </p>
+              <div className="flex flex-wrap items-center gap-6">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Order ID</p>
+                  <p className="mt-1 font-mono text-lg font-semibold text-darkBase">
+                    {order.orderId ?? `#${order._id.slice(-8).toUpperCase()}`}
+                  </p>
+                </div>
+                {order.trackingNumber && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Tracking number</p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-darkBase">
+                      {order.trackingNumber}
+                    </p>
+                  </div>
+                )}
+              </div>
+              {order.trackingNumber && (
+                <Link
+                  href={`/track?tracking=${encodeURIComponent(order.trackingNumber)}`}
+                  className="mt-4 inline-block text-primaryAccent hover:underline font-medium"
+                >
+                  Track this order →
+                </Link>
+              )}
 
               <div className="mt-6">
                 <p className="text-sm font-medium text-gray-500">Order summary</p>

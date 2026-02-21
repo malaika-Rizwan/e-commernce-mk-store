@@ -24,17 +24,22 @@ if (process.env.NODE_ENV !== 'production') {
   global.mongoose = cached;
 }
 
-// Log connection status in development (listeners attached once per process)
+// Log connection status in development (attach listeners once to avoid MaxListenersExceededWarning)
 if (process.env.NODE_ENV !== 'production') {
-  mongoose.connection.once('connected', () => {
-    console.log('[MongoDB] Connected to database');
-  });
-  mongoose.connection.on('error', (err) => {
-    console.error('[MongoDB] Connection error:', err.message);
-  });
-  mongoose.connection.on('disconnected', () => {
-    console.log('[MongoDB] Disconnected');
-  });
+  const conn = mongoose.connection;
+  conn.setMaxListeners(20);
+  if (!(global as unknown as { _mongooseDevListeners?: boolean })._mongooseDevListeners) {
+    (global as unknown as { _mongooseDevListeners?: boolean })._mongooseDevListeners = true;
+    conn.once('connected', () => {
+      console.log('[MongoDB] Connected to database');
+    });
+    conn.on('error', (err) => {
+      console.error('[MongoDB] Connection error:', err.message);
+    });
+    conn.on('disconnected', () => {
+      console.log('[MongoDB] Disconnected');
+    });
+  }
 }
 
 async function connectDB(): Promise<typeof mongoose> {

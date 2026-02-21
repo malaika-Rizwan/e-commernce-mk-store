@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import connectDB from '@/lib/db';
-import Order from '@/models/Order';
+import Order, { assignOrderIds } from '@/models/Order';
 import Product from '@/models/Product';
 import Coupon from '@/models/Coupon';
 import User from '@/models/User';
@@ -63,6 +63,9 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      if (!order.orderId) {
+        await assignOrderIds(order);
+      }
       order.isPaid = true;
       order.paidAt = new Date();
       order.stripeSessionId = session.id;
@@ -88,12 +91,21 @@ export async function POST(request: NextRequest) {
 
       const user = await User.findById(order.user).select('email name').lean();
       const email = session.customer_email ?? user?.email;
+      const displayOrderId = order.orderId ?? order._id.toString();
+      const estimatedDeliveryStr = order.estimatedDelivery?.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
       if (email) {
         try {
           await sendOrderConfirmation({
             to: email,
             userName: user?.name ?? 'Customer',
-            orderId: order._id.toString(),
+            orderId: displayOrderId,
+            trackingNumber: order.trackingNumber,
+            estimatedDelivery: estimatedDeliveryStr,
             totalPrice: order.totalPrice,
             items: order.items.map((i) => ({
               name: i.name,
@@ -108,7 +120,7 @@ export async function POST(request: NextRequest) {
       }
       try {
         await sendAdminNewOrderAlert({
-          orderId: order._id.toString(),
+          orderId: displayOrderId,
           customerName: user?.name ?? 'Customer',
           customerEmail: user?.email ?? email ?? '',
           items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),

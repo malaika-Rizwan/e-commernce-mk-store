@@ -1,17 +1,22 @@
 import { NextRequest } from 'next/server';
 import connectDB from '@/lib/db';
 import Order from '@/models/Order';
+import { getSession } from '@/lib/auth';
 import {
   successResponse,
   errorResponse,
+  unauthorizedResponse,
   notFoundResponse,
   serverErrorResponse,
 } from '@/lib/api-response';
 import { z } from 'zod';
 
+const ORDER_STATUSES = ['pending', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'cancelled'] as const;
+
 const UpdateOrderSchema = z.object({
   isDelivered: z.boolean().optional(),
   status: z.enum(['pending', 'shipped', 'delivered', 'cancelled']).optional(),
+  orderStatus: z.enum(ORDER_STATUSES).optional(),
 });
 
 export async function GET(
@@ -19,6 +24,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
+    if (!session || session.role !== 'admin') return unauthorizedResponse();
+
     const { id } = await params;
     await connectDB();
 
@@ -40,6 +48,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getSession();
+    if (!session || session.role !== 'admin') return unauthorizedResponse();
+
     const { id } = await params;
     const body = await request.json();
     const parsed = UpdateOrderSchema.safeParse(body);
@@ -53,11 +64,23 @@ export async function PATCH(
     const order = await Order.findById(id);
     if (!order) return notFoundResponse('Order not found');
 
+    if (parsed.data.orderStatus !== undefined) {
+      (order as { orderStatus?: string }).orderStatus = parsed.data.orderStatus;
+      if (parsed.data.orderStatus === 'Delivered') {
+        order.isDelivered = true;
+        order.deliveredAt = new Date();
+        order.status = 'delivered';
+      } else {
+        order.isDelivered = false;
+        order.deliveredAt = undefined;
+      }
+    }
     if (parsed.data.status !== undefined) {
       order.status = parsed.data.status;
       if (parsed.data.status === 'delivered') {
         order.isDelivered = true;
         order.deliveredAt = new Date();
+        (order as { orderStatus?: string }).orderStatus = 'Delivered';
       } else {
         order.isDelivered = false;
         order.deliveredAt = undefined;
@@ -67,12 +90,34 @@ export async function PATCH(
       order.isDelivered = true;
       order.deliveredAt = new Date();
       order.status = 'delivered';
+      (order as { orderStatus?: string }).orderStatus = 'Delivered';
     }
     await order.save();
 
     return successResponse(order);
   } catch (err) {
     console.error('Admin order update error:', err);
+    return serverErrorResponse();
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession();
+    if (!session || session.role !== 'admin') return unauthorizedResponse();
+
+    const { id } = await params;
+    await connectDB();
+
+    const order = await Order.findByIdAndDelete(id);
+    if (!order) return notFoundResponse('Order not found');
+
+    return successResponse({ message: 'Order deleted' });
+  } catch (err) {
+    console.error('Admin order delete error:', err);
     return serverErrorResponse();
   }
 }

@@ -8,6 +8,9 @@ import { AdminBackButton } from '@/components/admin/AdminBackButton';
 
 interface Order {
   _id: string;
+  orderId?: string;
+  trackingNumber?: string;
+  orderStatus?: string;
   user?: { email: string; name: string } | string;
   totalPrice: number;
   isPaid: boolean;
@@ -30,10 +33,15 @@ export default function AdminOrdersPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  async function fetchOrders() {
-    const res = await fetch('/api/admin/orders', { credentials: 'include' });
+  async function fetchOrders(overrideStatus?: string) {
+    const status = overrideStatus !== undefined ? overrideStatus : statusFilter;
+    const url = status
+      ? `/api/admin/orders?status=${encodeURIComponent(status)}`
+      : '/api/admin/orders';
+    const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
     if (data.success && data.data?.orders) {
       setOrders(data.data.orders);
@@ -53,6 +61,7 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     Promise.all([fetchOrders(), fetchStats()]).finally(() => setLoading(false));
   }, []);
+
 
   useEffect(() => {
     if (!loading) fetchStats();
@@ -113,6 +122,22 @@ export default function AdminOrdersPage() {
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Orders
         </h1>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            const v = e.target.value;
+            setStatusFilter(v);
+            fetchOrders(v);
+          }}
+          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+        >
+          <option value="">All statuses</option>
+          <option value="Processing">Processing</option>
+          <option value="Shipped">Shipped</option>
+          <option value="Out for Delivery">Out for Delivery</option>
+          <option value="Delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
       </div>
 
       {stats && (
@@ -199,8 +224,13 @@ export default function AdminOrdersPage() {
                         href={`/admin/orders/${order._id}`}
                         className="font-medium text-primary-600 hover:underline dark:text-primary-400"
                       >
-                        #{order._id.slice(-8)}
+                        {order.orderId ?? `#${order._id.slice(-8)}`}
                       </Link>
+                      {order.trackingNumber && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                          {order.trackingNumber}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {new Date(order.createdAt).toLocaleString()}
                       </p>
@@ -222,11 +252,11 @@ export default function AdminOrdersPage() {
                         >
                           {order.isPaid ? 'Paid' : 'Pending'}
                         </span>
-                        {order.isDelivered ? (
+                        {(order.orderStatus || order.isDelivered) && (
                           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                            Delivered
+                            {order.orderStatus ?? (order.isDelivered ? 'Delivered' : '—')}
                           </span>
-                        ) : null}
+                        )}
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
