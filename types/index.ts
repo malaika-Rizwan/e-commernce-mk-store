@@ -114,6 +114,9 @@ export interface IOrder {
     phone?: string;
   };
   paymentMethod: string;
+  paymentStatus?: 'pending' | 'paid' | 'failed';
+  transactionId?: string;
+  safepayOrderId?: string;
   paymentResult?: {
     id: string;
     status: string;

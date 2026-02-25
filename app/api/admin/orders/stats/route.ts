@@ -3,6 +3,8 @@ import connectDB from '@/lib/db';
 import Order from '@/models/Order';
 import { successResponse, serverErrorResponse } from '@/lib/api-response';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     await connectDB();

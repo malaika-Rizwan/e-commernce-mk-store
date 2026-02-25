@@ -11,6 +11,8 @@ import {
 } from '@/lib/api-response';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 const ORDER_STATUSES = ['pending', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'cancelled'] as const;
 
 const UpdateOrderSchema = z.object({

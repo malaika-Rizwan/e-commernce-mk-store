@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { loginSchema } from '@/lib/validations/auth';
 
-export default function LoginPage() {
+function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [step, setStep] = useState<'credentials' | '2fa'>('credentials');
@@ -220,5 +220,17 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-[70vh] items-center justify-center px-4 py-12" style={{ backgroundColor: '#BEB9B4' }}>
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#EBBB69] border-t-transparent" />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

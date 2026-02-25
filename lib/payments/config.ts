@@ -50,10 +50,10 @@ export const PAYMENT_METHODS = {
     id: 'safepay',
     label: 'Safepay',
     description: 'Pay with Safepay (Pakistan)',
-    route: '/api/checkout/safepay',
+    route: '/api/payment/create',
     enabled: Boolean(
-      (env.SAFEPAY_API_URL?.trim() || env.SAFEPAY_SANDBOX_URL?.trim()) &&
-        (env.SAFEPAY_API_KEY?.trim() || env.SAFEPAY_SECRET_KEY?.trim())
+      (env.SAFEPAY_BASE_URL?.trim() || env.SAFEPAY_API_URL?.trim() || env.SAFEPAY_SANDBOX_URL?.trim()) &&
+        (env.SAFEPAY_SECRET_KEY?.trim() || env.SAFEPAY_API_KEY?.trim())
     ),
   },
   stripe: {

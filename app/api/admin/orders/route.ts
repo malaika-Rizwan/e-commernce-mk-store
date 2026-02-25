@@ -8,6 +8,8 @@ import {
   serverErrorResponse,
 } from '@/lib/api-response';
 
+export const dynamic = 'force-dynamic';
+
 const ORDER_STATUS_FILTERS = ['pending', 'Processing', 'Shipped', 'Out for Delivery', 'Delivered', 'cancelled'];
 
 export async function GET(request: NextRequest) {
@@ -22,12 +24,19 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') ?? '20', 10)));
     const skip = (page - 1) * limit;
     const status = searchParams.get('status');
+    const paymentStatus = searchParams.get('paymentStatus');
 
     const filter: Record<string, unknown> = {};
     if (status && ORDER_STATUS_FILTERS.includes(status)) {
       filter.orderStatus = status;
-    } else if (status === 'paid') {
+    }
+    if (paymentStatus === 'paid') {
       filter.isPaid = true;
+    } else if (paymentStatus === 'pending') {
+      filter.isPaid = false;
+      filter.paymentStatus = { $ne: 'failed' };
+    } else if (paymentStatus === 'failed') {
+      filter.paymentStatus = 'failed';
     }
 
     const [orders, total] = await Promise.all([

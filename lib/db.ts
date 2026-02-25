@@ -1,12 +1,8 @@
 import mongoose from 'mongoose';
 
+// Don't throw at import time so Vercel/build can succeed without env.
+// We throw when connectDB() is called without MONGODB_URI (runtime).
 const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error(
-    'Please define the MONGODB_URI environment variable inside .env.local'
-  );
-}
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -43,6 +39,12 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 async function connectDB(): Promise<typeof mongoose> {
+  if (!MONGODB_URI) {
+    throw new Error(
+      'Please define the MONGODB_URI environment variable inside .env.local'
+    );
+  }
+
   if (cached.conn) {
     return cached.conn;
   }
@@ -52,7 +54,7 @@ async function connectDB(): Promise<typeof mongoose> {
       bufferCommands: false,
       maxPoolSize: 10,
     };
-    cached.promise = mongoose.connect(MONGODB_URI!, opts);
+    cached.promise = mongoose.connect(MONGODB_URI, opts);
   }
 
   try {

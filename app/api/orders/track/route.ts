@@ -3,6 +3,8 @@ import connectDB from '@/lib/db';
 import Order from '@/models/Order';
 import { successResponse, errorResponse, notFoundResponse, serverErrorResponse } from '@/lib/api-response';
 
+export const dynamic = 'force-dynamic';
+
 /** Public: get order tracking info by tracking number. No auth. */
 export async function GET(request: NextRequest) {
   try {

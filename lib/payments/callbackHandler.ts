@@ -3,7 +3,7 @@
  * Used by /api/payments/<gateway>/callback routes.
  */
 import connectDB from '@/lib/db';
-import Order, { assignOrderIds } from '@/models/Order';
+import Order, { assignOrderIds, type IOrderDocument } from '@/models/Order';
 import Product from '@/models/Product';
 import Coupon from '@/models/Coupon';
 import User from '@/models/User';
@@ -101,6 +101,9 @@ export async function handleGatewayCallback(
     if (!order.orderId) await assignOrderIds(order);
     order.isPaid = true;
     order.paidAt = new Date();
+    const orderDoc = order as IOrderDocument;
+    if ('paymentStatus' in orderDoc) orderDoc.paymentStatus = 'paid';
+    if ('transactionId' in orderDoc) orderDoc.transactionId = transactionId;
     order.paymentResult = {
       id: transactionId,
       status: 'paid',

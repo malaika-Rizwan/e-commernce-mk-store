@@ -7,6 +7,8 @@ import {
   serverErrorResponse,
 } from '@/lib/api-response';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Example admin-only route. Middleware already ensures only admin role can reach this.
  */

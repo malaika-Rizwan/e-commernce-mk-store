@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
@@ -30,7 +30,7 @@ interface TrackResult {
   totalPrice: number;
 }
 
-export default function TrackPage() {
+function TrackContent() {
   const searchParams = useSearchParams();
   const trackingParam = searchParams.get('tracking') ?? '';
   const [tracking, setTracking] = useState(trackingParam);
@@ -230,5 +230,17 @@ export default function TrackPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function TrackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-pageBg flex items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primaryAccent border-t-transparent" />
+      </div>
+    }>
+      <TrackContent />
+    </Suspense>
   );
 }

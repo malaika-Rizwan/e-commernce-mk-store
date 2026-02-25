@@ -11,6 +11,8 @@ import {
   serverErrorResponse,
 } from '@/lib/api-response';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Get order by Stripe Checkout session ID (for success page after Stripe redirect).
  */

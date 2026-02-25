@@ -41,7 +41,14 @@ const OrderSchema = new Schema<IOrderDocument>(
       enum: ['pending', 'shipped', 'delivered', 'cancelled'],
       default: 'pending',
     },
-    paymentMethod: { type: String, required: true, default: 'stripe' },
+    paymentMethod: { type: String, required: true, default: 'safepay' },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    transactionId: { type: String },
+    safepayOrderId: { type: String },
     paymentResult: {
       id: String,
       status: String,

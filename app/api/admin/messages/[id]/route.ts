@@ -11,6 +11,8 @@ import {
 } from '@/lib/api-response';
 import type { ContactStatus } from '@/models/Contact';
 
+export const dynamic = 'force-dynamic';
+
 const VALID_STATUSES: ContactStatus[] = ['new', 'read', 'replied'];
 
 export async function GET(

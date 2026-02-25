@@ -11,6 +11,10 @@ interface Order {
   orderId?: string;
   trackingNumber?: string;
   orderStatus?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  transactionId?: string;
+  safepayOrderId?: string;
   user?: { email: string; name: string } | string;
   totalPrice: number;
   isPaid: boolean;
@@ -34,13 +38,16 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('all');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [paymentFilter, setPaymentFilter] = useState<string>('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  async function fetchOrders(overrideStatus?: string) {
+  async function fetchOrders(overrideStatus?: string, overridePayment?: string) {
     const status = overrideStatus !== undefined ? overrideStatus : statusFilter;
-    const url = status
-      ? `/api/admin/orders?status=${encodeURIComponent(status)}`
-      : '/api/admin/orders';
+    const payment = overridePayment !== undefined ? overridePayment : paymentFilter;
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (payment) params.set('paymentStatus', payment);
+    const url = params.toString() ? `/api/admin/orders?${params}` : '/api/admin/orders';
     const res = await fetch(url, { credentials: 'include' });
     const data = await res.json();
     if (data.success && data.data?.orders) {
@@ -127,7 +134,7 @@ export default function AdminOrdersPage() {
           onChange={(e) => {
             const v = e.target.value;
             setStatusFilter(v);
-            fetchOrders(v);
+            fetchOrders(v, paymentFilter);
           }}
           className="rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
         >
@@ -137,6 +144,20 @@ export default function AdminOrdersPage() {
           <option value="Out for Delivery">Out for Delivery</option>
           <option value="Delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
+        </select>
+        <select
+          value={paymentFilter}
+          onChange={(e) => {
+            const v = e.target.value;
+            setPaymentFilter(v);
+            fetchOrders(statusFilter, v || undefined);
+          }}
+          className="rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+        >
+          <option value="">All payments</option>
+          <option value="paid">Paid</option>
+          <option value="pending">Pending</option>
+          <option value="failed">Failed</option>
         </select>
       </div>
 
@@ -206,6 +227,9 @@ export default function AdminOrdersPage() {
                     Total
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Payment
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     Status
                   </th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -241,17 +265,36 @@ export default function AdminOrdersPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                       ${order.totalPrice.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex flex-col gap-0.5">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs ${
+                          className={`inline-flex w-fit rounded-full px-2 py-0.5 text-xs ${
                             order.isPaid
                               ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                              : order.paymentStatus === 'failed'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
                           }`}
                         >
-                          {order.isPaid ? 'Paid' : 'Pending'}
+                          {order.isPaid ? 'Paid' : order.paymentStatus === 'failed' ? 'Failed' : 'Pending'}
                         </span>
+                        {order.paymentMethod && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{order.paymentMethod}</span>
+                        )}
+                        {order.transactionId && (
+                          <span className="font-mono text-xs text-gray-500 dark:text-gray-400" title={order.transactionId}>
+                            Tx: {order.transactionId.length > 14 ? `${order.transactionId.slice(0, 14)}…` : order.transactionId}
+                          </span>
+                        )}
+                        {order.safepayOrderId && (
+                          <span className="font-mono text-xs text-gray-500 dark:text-gray-400" title={order.safepayOrderId}>
+                            SP: {order.safepayOrderId.length > 14 ? `${order.safepayOrderId.slice(0, 14)}…` : order.safepayOrderId}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
                         {(order.orderStatus || order.isDelivered) && (
                           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                             {order.orderStatus ?? (order.isDelivered ? 'Delivered' : '—')}
@@ -260,6 +303,13 @@ export default function AdminOrdersPage() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
+                      {order.paymentStatus === 'failed' && (
+                        <Link href="/checkout" className="inline-block">
+                          <Button variant="outline" size="sm" className="mr-1">
+                            Retry payment
+                          </Button>
+                        </Link>
+                      )}
                       {order.isPaid && !order.isDelivered && (
                         <Button
                           variant="outline"
