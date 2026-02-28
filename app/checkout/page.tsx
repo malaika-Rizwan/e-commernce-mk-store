@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { useCartItems } from '@/store/hooks';
+import { useAppDispatch, useCartItems } from '@/store/hooks';
+import { removeItem } from '@/store/slices/cartSlice';
 import { Button } from '@/components/ui/Button';
 import { ShippingAddressForm } from '@/components/checkout/ShippingAddressForm';
 import { CheckoutOrderSummary } from '@/components/checkout/CheckoutOrderSummary';
@@ -37,6 +38,7 @@ interface PaymentMethod {
 export default function CheckoutPage() {
   const { user, loading: authLoading } = useAuth();
   const items = useCartItems();
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true);
@@ -159,8 +161,16 @@ export default function CheckoutPage() {
 
       if (!res.ok) {
         const msg = data.error ?? 'Checkout failed';
-        setError(msg);
-        toast.error(msg);
+        const unavailableIds = data.unavailableProductIds as string[] | undefined;
+        if (Array.isArray(unavailableIds) && unavailableIds.length > 0) {
+          unavailableIds.forEach((id) => dispatch(removeItem(id)));
+          const removedMsg = 'Some products were removed from your cart (no longer available). Please try again.';
+          setError(removedMsg);
+          toast.error(removedMsg);
+        } else {
+          setError(msg);
+          toast.error(msg);
+        }
         return;
       }
 

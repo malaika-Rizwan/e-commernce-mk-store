@@ -30,3 +30,10 @@ export function notFoundResponse(message = 'Not found') {
 export function serverErrorResponse(message = 'Internal server error') {
   return errorResponse(message, 500, 'SERVER_ERROR');
 }
+
+export function serverUnavailableResponse(
+  message = 'Service unavailable. Check server configuration.',
+  code = 'CONFIG_MISSING'
+) {
+  return errorResponse(message, 503, code);
+}

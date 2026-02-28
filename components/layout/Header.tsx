@@ -55,7 +55,7 @@ export function Header() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const q = search.trim();
-    if (q) router.push(`/?q=${encodeURIComponent(q)}`);
+    if (q) router.push(`/products?q=${encodeURIComponent(q)}`);
     else router.push('/products');
     setMobileOpen(false);
   }

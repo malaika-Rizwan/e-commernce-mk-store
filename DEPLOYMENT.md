@@ -289,3 +289,30 @@ For stricter security you can add headers in `next.config.js` (e.g. `X-Frame-Opt
 | 6 | Go through the [Security checklist](#8-security-checklist). |
 
 For issues, check Vercel/Render build and runtime logs, Stripe webhook delivery logs, and MongoDB Atlas metrics and logs.
+
+---
+
+## Troubleshooting: 500 API errors after deploy
+
+If your deployed site loads but **API calls return 500** (e.g. `/api/products`, `/api/orders`):
+
+1. **Set `MONGODB_URI` in Vercel**  
+   Project → **Settings** → **Environment Variables** → add:
+   - **Name:** `MONGODB_URI`  
+   - **Value:** your MongoDB Atlas connection string (see [§2.2](#22-get-connection-string)).  
+   - Scope: **Production** (and **Preview** if you use preview deployments).  
+   Save and **redeploy** (Deployments → ⋮ on latest → Redeploy).
+
+2. **Set `JWT_SECRET`**  
+   Add `JWT_SECRET` with a long random string (e.g. from `openssl rand -base64 32`). Required for auth APIs.
+
+3. **Set `NEXT_PUBLIC_APP_URL`**  
+   Set to your live URL, e.g. `https://your-project.vercel.app` (no trailing slash). Required for redirects and some APIs.
+
+4. **Check Vercel logs**  
+   Project → **Deployments** → click a deployment → **Functions** → open a failing request and read the **Runtime Logs**. You’ll see the real error (e.g. "MONGODB_URI is not set" or a MongoDB connection error).
+
+5. **MongoDB Atlas**  
+   In Atlas → **Network Access**, ensure **0.0.0.0/0** is allowed so Vercel can connect. In **Database Access**, ensure the user has read/write (or Atlas admin) and the password in `MONGODB_URI` is correct and URL-encoded if it has special characters.
+
+Once `MONGODB_URI`, `JWT_SECRET`, and `NEXT_PUBLIC_APP_URL` are set and the project is redeployed, API 500s from missing config should stop. If they continue, use the runtime logs to see the exact error.

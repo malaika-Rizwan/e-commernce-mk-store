@@ -6,6 +6,7 @@ import {
   errorResponse,
   notFoundResponse,
   serverErrorResponse,
+  serverUnavailableResponse,
 } from '@/lib/api-response';
 import {
   createProductSchema,
@@ -90,6 +91,10 @@ export async function listProducts(request: NextRequest) {
       },
     });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product list error:', err);
     return serverErrorResponse();
   }
@@ -102,6 +107,10 @@ export async function getProductBySlug(slug: string) {
     if (!product) return notFoundResponse('Product not found');
     return successResponse(normalizeProduct(product));
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product get error:', err);
     return serverErrorResponse();
   }
@@ -114,6 +123,10 @@ export async function getProductById(id: string) {
     if (!product) return notFoundResponse('Product not found');
     return successResponse(normalizeProduct(product));
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product get error:', err);
     return serverErrorResponse();
   }
@@ -142,6 +155,10 @@ export async function createProduct(request: NextRequest) {
 
     return successResponse(normalizeProduct(product.toObject()), 201);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product create error:', err);
     return serverErrorResponse();
   }
@@ -177,6 +194,10 @@ export async function updateProduct(request: NextRequest, id: string) {
 
     return successResponse(normalizeProduct(product.toObject()));
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product update error:', err);
     return serverErrorResponse();
   }
@@ -189,6 +210,10 @@ export async function deleteProduct(id: string) {
     if (!product) return notFoundResponse('Product not found');
     return successResponse({ message: 'Product deleted' });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Product delete error:', err);
     return serverErrorResponse();
   }
@@ -202,6 +227,10 @@ export async function getCategories() {
     );
     return successResponse({ categories });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('MONGODB_URI') || msg.includes('environment variable')) {
+      return serverUnavailableResponse();
+    }
     console.error('Categories error:', err);
     return serverErrorResponse();
   }

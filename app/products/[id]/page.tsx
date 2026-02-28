@@ -3,12 +3,11 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { products } from '@/data/products';
 import { RatingStars } from '@/components/review/RatingStars';
 import { Button } from '@/components/ui/Button';
-import { useAppDispatch } from '@/store/hooks';
-import { addItem } from '@/store/slices/cartSlice';
 import { ProductCard } from '@/components/product/ProductCard';
 
 export default function ProductDetailsPage() {
@@ -26,7 +25,7 @@ export default function ProductDetailsPage() {
   const [selected, setSelected] = useState(0);
   const [qty, setQty] = useState(1);
   const [copied, setCopied] = useState(false);
-  const dispatch = useAppDispatch();
+  const router = useRouter();
 
   if (!product) {
     return (
@@ -55,16 +54,13 @@ export default function ProductDetailsPage() {
 
   function addToCart() {
     if (!product) return;
-    dispatch(
-      addItem({
-        productId: product.id,
-        slug: product.id,
-        name: product.name,
-        price: product.price,
-        quantity: qty,
-        image: product.image,
-      })
+    // Static demo products use numeric ids that don't exist in the database.
+    // Adding them would cause "no longer available" at checkout. Direct users to the main catalog.
+    toast.error(
+      'This is a demo product. Add items from the main Products catalog to checkout.',
+      { duration: 5000 }
     );
+    router.push('/products');
   }
 
   function buyNow() {
